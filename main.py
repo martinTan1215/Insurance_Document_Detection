@@ -1,60 +1,124 @@
 import os
 import numpy as np
+import tensorflow as tf
+from keras.models import load_model
 import keras
 from keras.models import Sequential
 from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
 from keras.preprocessing.image import ImageDataGenerator
+from keras.utils import load_img
+from keras.preprocessing import image
+from sklearn.model_selection import train_test_split
 
-# Define the input shape of the images
-img_height = 224
-img_width = 224
-channels = 3
-input_shape = (img_height, img_width, channels)
+# Setting dataset path and model parameters
+data_path = "C:\\Users\\thefa\\OneDrive\\Desktop\\Insurance Dataset"
+num_classes = 3
+img_height, img_width = 200, 200
+batch_size = 16
 
-# Define the number of classes (categories) for the images
-num_classes = 5
+# Split dataset into train and test
+train_data, test_data = train_test_split(os.listdir(data_path), test_size=0.2, random_state=42)
 
-# Create a sequential model
-model = Sequential()
+# Data preprocessing and augmentation
+train_datagen = ImageDataGenerator(
+    rescale=1./255,
+    validation_split=0.2,
+    horizontal_flip=True,
+    zoom_range=0.2,
+    shear_range=0.2,
+    rotation_range=20,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    fill_mode="nearest"
+)
 
-# Add convolutional layers
-model.add(Conv2D(32, kernel_size=(3, 3), activation='relu', input_shape=input_shape))
-model.add(MaxPooling2D(pool_size=(2, 2)))
-model.add(Conv2D(64, kernel_size=(3, 3), activation='relu'))
-model.add(MaxPooling2D(pool_size=(2, 2)))
-model.add(Flatten())
-
-# Add dense layers
-model.add(Dense(128, activation='relu'))
-model.add(Dropout(0.5))
-model.add(Dense(num_classes, activation='softmax'))
-
-# Compile the model
-model.compile(loss=keras.losses.categorical_crossentropy, optimizer=keras.optimizers.Adadelta(), metrics=['accuracy'])
-
-# Data augmentation for the training images
-train_datagen = ImageDataGenerator(rescale=1./255, shear_range=0.2, zoom_range=0.2, horizontal_flip=True)
-train_generator = train_datagen.flow_from_directory(train_dir, target_size=(img_height, img_width), batch_size=32, class_mode='categorical')
-
-# Data augmentation for the validation images
-val_datagen = ImageDataGenerator(rescale=1./255)
-val_generator = val_datagen.flow_from_directory(val_dir, target_size=(img_height, img_width), batch_size=32, class_mode='categorical')
-
-# Train the model
-model.fit_generator(train_generator, steps_per_epoch=100, epochs=10, validation_data=val_generator, validation_steps=50)
-
-# Evaluate the model on the test data
+# Test data generator (no augmentation)
 test_datagen = ImageDataGenerator(rescale=1./255)
-test_generator = test_datagen.flow_from_directory(test_dir, target_size=(img_height, img_width), batch_size=32, class_mode='categorical', shuffle=False)
-score = model.evaluate_generator(test_generator)
-print('Test loss:', score[0])
-print('Test accuracy:', score[1])
 
-# Make predictions on new images
-test_image = keras.preprocessing.image.load_img('/path/to/test/image.jpg', target_size=(img_height, img_width))
-test_image = keras.preprocessing.image.img_to_array(test_image)
-test_image = np.expand_dims(test_image, axis=0)
-test_image = test_image / 255.0
-predicted_class = np.argmax(model.predict(test_image), axis=-1)
-class_names = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5']
-print('Predicted class:', class_names[predicted_class[0]])
+train_generator = train_datagen.flow_from_directory(
+    data_path,
+    target_size=(img_height, img_width),
+    batch_size=batch_size,
+    class_mode="categorical",
+    subset="training"
+)
+
+validation_generator = train_datagen.flow_from_directory(
+    data_path,
+    target_size=(img_height, img_width),
+    batch_size=batch_size,
+    class_mode="categorical",
+    subset="validation"
+)
+
+test_generator = test_datagen.flow_from_directory(
+    "C:\\Users\\thefa\\OneDrive\\Desktop\\Test Dataset",
+    target_size=(img_height, img_width),
+    batch_size=batch_size,
+    class_mode="categorical",
+    classes=test_data
+)
+
+## Model architecture
+model = Sequential([
+    Conv2D(32, (3, 3), activation='relu', input_shape=(img_height, img_width, 3)),
+    MaxPooling2D(2, 2),
+    Conv2D(64, (3, 3), activation='relu'),
+    MaxPooling2D(2, 2),
+    Flatten(),
+    Dense(512, activation='relu'),
+    Dropout(0.5),
+    Dense(num_classes, activation='softmax')
+])
+
+# Compiling the model
+model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+# Model summary
+model.summary()
+
+# Training the model
+epochs = 10
+history = model.fit(
+    train_generator,
+    steps_per_epoch=train_generator.samples // batch_size,
+    validation_data=validation_generator,
+    validation_steps=validation_generator.samples // batch_size,
+    epochs=epochs
+)
+
+# Evaluate the model on the test dataset
+test_loss, test_accuracy = model.evaluate(test_generator, steps=test_generator.samples // batch_size)
+print("Test Loss:", test_loss)
+print("Test Accuracy:", test_accuracy)
+
+# Save the model
+model.save("insurance_classification_model.h5")
+ 
+# Define the function to preprocess the input image
+def preprocess_image(img_path, target_size):
+    img = load_img.load_img(img_path, target_size=target_size)
+    img_array = image.img_to_array(img)
+    img_array = np.expand_dims(img_array, axis=0)
+    img_array /= 255.
+    return img_array
+
+# Set the path to the image you want to classify
+img_path = "C:\\Users\\thefa\\OneDrive\\Desktop\\New folder\\test"
+
+# Preprocess the input image
+img_height, img_width = 200, 200
+input_image = preprocess_image(img_path, (img_height, img_width))
+
+# Predict the class using the model
+predictions = model.predict(input_image)
+
+# Get the class with the highest probability
+predicted_class_index = np.argmax(predictions[0])
+
+# Retrieve the class label from the generator's class_indices dictionary
+class_labels = list(train_generator.class_indices.keys())
+predicted_class_label = class_labels[predicted_class_index]
+
+# Print the predicted class label
+print("Predicted class label:", predicted_class_label)
