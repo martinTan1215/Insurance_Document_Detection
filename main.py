@@ -1,124 +1,123 @@
+from PIL import Image
 import os
 import numpy as np
-import tensorflow as tf
-from keras.models import load_model
-import keras
 from keras.models import Sequential
-from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
-from keras.preprocessing.image import ImageDataGenerator
-from keras.utils import load_img
-from keras.preprocessing import image
+from keras.layers import Dense, Dropout, Flatten
+from keras.layers import Conv2D, MaxPooling2D
+import keras
 from sklearn.model_selection import train_test_split
 
-# Setting dataset path and model parameters
-data_path = "C:\\Users\\thefa\\OneDrive\\Desktop\\Insurance Dataset"
-num_classes = 3
-img_height, img_width = 200, 200
-batch_size = 16
+# Set the path to your images
+image_dir = 'C:\\Users\\thefa\\OneDrive\\Desktop\\Insurance Dataset'
 
-# Split dataset into train and test
-train_data, test_data = train_test_split(os.listdir(data_path), test_size=0.2, random_state=42)
+# Set the names of your classes
+classes = ['Home Insurance', 'Car Insurance', 'Health Insurance']
 
-# Data preprocessing and augmentation
-train_datagen = ImageDataGenerator(
-    rescale=1./255,
-    validation_split=0.2,
-    horizontal_flip=True,
-    zoom_range=0.2,
-    shear_range=0.2,
-    rotation_range=20,
-    width_shift_range=0.2,
-    height_shift_range=0.2,
-    fill_mode="nearest"
-)
+# Create lists to store the data and labels
+x_data = []
+y_data = []
 
-# Test data generator (no augmentation)
-test_datagen = ImageDataGenerator(rescale=1./255)
 
-train_generator = train_datagen.flow_from_directory(
-    data_path,
-    target_size=(img_height, img_width),
-    batch_size=batch_size,
-    class_mode="categorical",
-    subset="training"
-)
+# input image dimensions
+img_rows, img_cols = 28, 28
 
-validation_generator = train_datagen.flow_from_directory(
-    data_path,
-    target_size=(img_height, img_width),
-    batch_size=batch_size,
-    class_mode="categorical",
-    subset="validation"
-)
+# Loop over each class
+for label, class_name in enumerate(classes):
+    # Set the path to the class folder
+    class_dir = os.path.join(image_dir, class_name)
+    
+    # Loop over each image in the class folder
+    for filename in os.listdir(class_dir):
+        # Open the image
+        image = Image.open(os.path.join(class_dir, filename))
+        
+        # Preprocess the image here (e.g. resize, normalize, etc.)
+        # Resize the image
+        image = image.resize((img_rows, img_cols))
 
-test_generator = test_datagen.flow_from_directory(
-    "C:\\Users\\thefa\\OneDrive\\Desktop\\Test Dataset",
-    target_size=(img_height, img_width),
-    batch_size=batch_size,
-    class_mode="categorical",
-    classes=test_data
-)
+        # Convert the image to grayscale
+        image = image.convert('L')
+        
+        # Convert the image to a NumPy array and add it to the data list
+        x_data.append(np.array(image))
+        
+        # Add the label to the labels list
+        y_data.append(label)
 
-## Model architecture
-model = Sequential([
-    Conv2D(32, (3, 3), activation='relu', input_shape=(img_height, img_width, 3)),
-    MaxPooling2D(2, 2),
-    Conv2D(64, (3, 3), activation='relu'),
-    MaxPooling2D(2, 2),
-    Flatten(),
-    Dense(512, activation='relu'),
-    Dropout(0.5),
-    Dense(num_classes, activation='softmax')
-])
+# Convert the data and labels to NumPy arrays
+x_data = np.array(x_data)
+y_data = np.array(y_data)
 
-# Compiling the model
-model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-# Model summary
-model.summary()
+# Split the data into training and testing sets here
+x_train, x_test, y_train, y_test = train_test_split(x_data, y_data, test_size=0.2)
 
-# Training the model
-epochs = 10
-history = model.fit(
-    train_generator,
-    steps_per_epoch=train_generator.samples // batch_size,
-    validation_data=validation_generator,
-    validation_steps=validation_generator.samples // batch_size,
-    epochs=epochs
-)
+# Set parameters
+batch_size = 16 # batch size for training
+num_classes = 3 # number of classes (Home Insurance, Car Insurance, Health Insurance)
+epochs = 12 # number of epochs to train for
 
-# Evaluate the model on the test dataset
-test_loss, test_accuracy = model.evaluate(test_generator, steps=test_generator.samples // batch_size)
-print("Test Loss:", test_loss)
-print("Test Accuracy:", test_accuracy)
+# Resize the image
+image = image.resize((img_rows, img_cols))
+
+# Convert the image to grayscale
+image = image.convert('L')
+
+# Reshape the data to fit the model
+x_train = x_train.reshape(x_train.shape[0], img_rows, img_cols, 1)
+x_test = x_test.reshape(x_test.shape[0], img_rows, img_cols, 1)
+input_shape = (img_rows, img_cols, 1)
+
+# Normalize the pixel values
+x_train = x_train.astype('float32')
+x_test = x_test.astype('float32')
+x_train /= 255
+x_test /= 255
+
+# Convert class vectors to binary class matrices
+y_train = keras.utils.to_categorical(y_train, num_classes)
+y_test = keras.utils.to_categorical(y_test, num_classes)
+
+# Build the model
+model = Sequential()
+
+# Add a convolutional layer
+model.add(Conv2D(32, kernel_size=(3, 3),
+                 activation='relu',
+                 input_shape=input_shape))
+
+# Add another convolutional layer
+model.add(Conv2D(64, (3, 3), activation='relu'))
+
+# Add a max pooling layer
+model.add(MaxPooling2D(pool_size=(2, 2)))
+
+# Add a dropout layer
+model.add(Dropout(0.25))
+
+# Flatten the output
+model.add(Flatten())
+
+# Add a dense layer
+model.add(Dense(128, activation='relu'))
+
+# Add another dropout layer
+model.add(Dropout(0.5))
+
+# Add the output layer
+model.add(Dense(num_classes, activation='softmax'))
+
+# Compile the model
+model.compile(loss=keras.losses.categorical_crossentropy,
+              optimizer=keras.optimizers.Adadelta(),
+              metrics=['accuracy'])
+
+# Train the model
+model.fit(x_train, y_train,
+          batch_size=batch_size,
+          epochs=epochs,
+          verbose=1,
+          validation_data=(x_test, y_test))
 
 # Save the model
 model.save("insurance_classification_model.h5")
- 
-# Define the function to preprocess the input image
-def preprocess_image(img_path, target_size):
-    img = load_img.load_img(img_path, target_size=target_size)
-    img_array = image.img_to_array(img)
-    img_array = np.expand_dims(img_array, axis=0)
-    img_array /= 255.
-    return img_array
-
-# Set the path to the image you want to classify
-img_path = "C:\\Users\\thefa\\OneDrive\\Desktop\\New folder\\test"
-
-# Preprocess the input image
-img_height, img_width = 200, 200
-input_image = preprocess_image(img_path, (img_height, img_width))
-
-# Predict the class using the model
-predictions = model.predict(input_image)
-
-# Get the class with the highest probability
-predicted_class_index = np.argmax(predictions[0])
-
-# Retrieve the class label from the generator's class_indices dictionary
-class_labels = list(train_generator.class_indices.keys())
-predicted_class_label = class_labels[predicted_class_index]
-
-# Print the predicted class label
-print("Predicted class label:", predicted_class_label)
