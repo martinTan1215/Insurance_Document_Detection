@@ -1,43 +1,46 @@
+import joblib
 from PIL import Image
-import os
-import numpy as np
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Flatten
-from keras.layers import Conv2D, MaxPooling2D
-import keras
-from sklearn.model_selection import train_test_split
-from keras.models import load_model
+import pytesseract
 
-# Load the trained model
-model = load_model("insurance_classification_model.h5")
+# Load the saved model
+clf = joblib.load("insurance_classification_model.pkl")
 
-# input image dimensions
-img_rows, img_cols = 28, 28
+# Load the fitted vectorizer
+vectorizer = joblib.load("tfidf_vectorizer.pkl")
 
-# Set the names of your classes
-classes = ['Home Insurance', 'Car Insurance', 'Health Insurance']
+# Set the path to the new image you want to predict
+image_path = "//Users/tanqiao/Desktop/TestDataset/Test1.png"
 
-def predict_image(image_path):
-    # Open the image
-    image = Image.open(image_path)
+# Open the image
+image = Image.open(image_path)
 
-    # Resize and convert the image to grayscale
-    image = image.resize((img_rows, img_cols)).convert('L')
+# Resize the image pixels
+image = image.resize((500, 500))
 
-    # Convert the image to a NumPy array
-    image_array = np.array(image)
+# Convert the image to grayscale
+image = image.convert('L')
 
-    # Reshape and normalize the image
-    image_array = image_array.reshape(1, img_rows, img_cols, 1).astype('float32') / 255
+# Use pytesseract to convert the image to text
+text = pytesseract.image_to_string(image)
 
-    # Make a prediction using the model
-    prediction = model.predict(image_array)
+# Preprocess the text
+text = text.replace('Auto Insurance Claim Form', 'Car Insurance Claim Form')
+text = text.replace('Auto Insurance', 'Car Insurance Claim Form')
+text = text.replace('Vehicle Insurance Claim Form', 'Car Insurance Claim Form')
+text = text.replace('Vehicle Insurance', 'Car Insurance Claim Form')
+text = text.replace('Motor Insurance', 'Car Insurance Claim Form')
+text = text.replace('Property Insurance Claim Form', 'Home Insurance Claim Form')
+text = text.replace('Property Insurance', 'Home Insurance Claim Form')
+text = text.replace('Health Insurance', 'Health Insurance Claim Form')
+text = text.replace('Life Insurance', 'Health Insurance Claim Form')
 
-    # Find the class that has the highest probability
-    predicted_class = np.argmax(prediction)
+# Vectorize the preprocessed text using the fitted vectorizer
+x_new = vectorizer.transform([text])
 
-    # Print the class name
-    print(f'The model predicts that the image is: {classes[predicted_class]}')
+# Make the prediction
+predicted_label = clf.predict(x_new)[0]
+class_names = ['Home Insurance Claim Form', 'Car Insurance Claim Form', 'Health Insurance Claim Form']
+predicted_class = class_names[predicted_label]
 
-# Test the function with an image of your choice
-predict_image('C:\\Users\\thefa\\OneDrive\\Desktop\\Insurance Dataset\\Car Insurance\\car-insurance-claim-form-1.jpg')
+# Print the predicted class
+print("Predicted class:", predicted_class)

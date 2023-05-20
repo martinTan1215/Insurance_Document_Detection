@@ -1,0 +1,97 @@
+from PIL import Image
+import numpy as np
+import os
+import pytesseract
+from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.svm import SVC
+import joblib
+
+# Set the path to your images
+image_dir = '/Users/tanqiao/Downloads/Insurance_Dataset'
+
+# Set the names of your classes
+classes = ['Home Insurance Claim Form', 'Car Insurance Claim Form', 'Health Insurance Claim Form']
+
+# Create lists to store the data and labels
+x_data = []
+y_data = []
+
+# Loop over each class
+for label, class_name in enumerate(classes):
+    # Set the path to the class folder
+    class_dir = os.path.join(image_dir, class_name)
+    
+    # Loop over each image in the class folder
+    for filename in os.listdir(class_dir):
+        # Open the image
+        image = Image.open(os.path.join(class_dir, filename))
+
+        # Resize the image pixels
+        image = image.resize((500, 500))
+
+        # Convert the image to grayscale
+        image = image.convert('L')
+        
+        # Use pytesseract to convert image to text
+        text = pytesseract.image_to_string(image)
+        
+        
+        # Replace 'Auto Insurance', 'Vehicle Insurance' with 'Car Insurance'
+        text = text.replace('Auto Insurance Claim Form', 'Car Insurance Claim Form')
+        text = text.replace('Auto Insurance', 'Car Insurance Claim Form')
+        text = text.replace('Vehicle Insurance Claim Form', 'Car Insurance Claim Form')
+        text = text.replace('Vehicle Insurance', 'Car Insurance Claim Form')
+        text = text.replace('Motor Insurance', 'Car Insurance Claim Form')
+
+        # Replace 'Property Insurance' with 'Home Insurance'
+        text = text.replace('Property Insurance Claim Form', 'Home Insurance Claim Form')
+        text = text.replace('Property Insurance', 'Home Insurance Claim Form')
+
+        # Replace 'Health Insurance' with 'Health Insurance'
+        text = text.replace('Health Insurance', 'Health Insurance Claim Form')
+        text = text.replace('Life Insurance', 'Health Insurance Claim Form')
+
+        # Add the text to the data list
+        x_data.append(text)
+        
+        # Add the label to the labels list
+        y_data.append(label)
+
+# Convert the data and labels to NumPy arrays
+x_data = np.array(x_data)
+y_data = np.array(y_data)
+
+# Vectorize the text data
+vectorizer = TfidfVectorizer()
+x_data = vectorizer.fit_transform(x_data)
+
+# Save the fitted vectorizer
+joblib.dump(vectorizer, "tfidf_vectorizer.pkl")
+
+# Split the data into training and testing sets
+x_train, x_test, y_train, y_test = train_test_split(x_data, y_data, test_size=0.2)
+
+# Create and train a classifier
+clf = SVC()
+
+# Perform cross-validation on the training data
+cv_scores = cross_val_score(clf, x_train, y_train, cv=5)
+
+# Fit the classifier on the training data
+clf.fit(x_train, y_train)
+
+# Evaluate the classifier on the training set
+train_accuracy = clf.score(x_train, y_train)
+
+# Evaluate the classifier on the test set
+test_accuracy = clf.score(x_test, y_test)
+
+# Print the cross-validation scores and performance metrics
+print("Cross-validation scores:", cv_scores)
+print("Mean cross-validation score:", np.mean(cv_scores))
+print("Train accuracy:", train_accuracy)
+print("Test accuracy:", test_accuracy)
+
+# Save the trained model
+joblib.dump(clf, "insurance_classification_model.pkl")
